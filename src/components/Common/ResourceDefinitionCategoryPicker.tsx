@@ -583,6 +583,12 @@ export function ResourceDefinitionCategoryPicker<T>({
               onSelect={() =>
                 handleCategorySelect(category.slug, category.title)
               }
+              onPointerUp={(e) => {
+                if (e.pointerType !== "mouse") {
+                  e.preventDefault();
+                  handleCategorySelect(category.slug, category.title);
+                }
+              }}
               className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150 border-b border-gray-200"
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -610,6 +616,12 @@ export function ResourceDefinitionCategoryPicker<T>({
             key={category.id}
             value={category.title}
             onSelect={() => handleCategorySelect(category.slug, category.title)}
+            onPointerUp={(e) => {
+              if (e.pointerType !== "mouse") {
+                e.preventDefault();
+                handleCategorySelect(category.slug, category.title);
+              }
+            }}
             className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150 border-b border-gray-200"
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -640,6 +652,14 @@ export function ResourceDefinitionCategoryPicker<T>({
         key={definition.id}
         value={`${definition.title}-${definition.id}`}
         onSelect={() => handleDefinitionSelect(definition)}
+        onPointerUp={(e) => {
+          if (e.pointerType !== "mouse") {
+            // Ignore taps on the favorite toggle button
+            if ((e.target as HTMLElement).closest("button")) return;
+            e.preventDefault();
+            handleDefinitionSelect(definition);
+          }
+        }}
         className={cn(
           "flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150 border-b border-gray-200 last:border-b-0",
           searchQuery && definition.category && "py-1",

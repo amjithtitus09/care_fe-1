@@ -889,7 +889,11 @@ export function ResourceDefinitionCategoryPicker<T>({
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  <TabsContent value="search" className="h-full mt-0">
+                  <TabsContent
+                    value="search"
+                    className="h-full mt-0"
+                    autoFocus={!isIOSDevice}
+                  >
                     {renderMainContent()}
                   </TabsContent>
                   <TabsContent value="recent" className="h-full mt-0">

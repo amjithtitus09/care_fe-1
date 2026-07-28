@@ -12,7 +12,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,7 @@ import resourceCategoryApi from "@/types/base/resourceCategory/resourceCategoryA
 import { ProductKnowledgeType } from "@/types/inventory/productKnowledge/productKnowledge";
 import mutate from "@/Utils/request/mutate";
 import query from "@/Utils/request/query";
+import { isIOSDevice } from "@/Utils/utils";
 
 interface CategoryBreadcrumb {
   slug: string;
@@ -159,26 +160,6 @@ export function ResourceDefinitionCategoryPicker<T>({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [breadcrumbsExpanded, setBreadcrumbsExpanded] = useState(false);
-  // Set on touch/pen pointerup to avoid double selection from the following onSelect.
-  const pointerSelectedRef = useRef(false);
-  // Records where a touch/pen press started so a moved pointer (scroll) is not
-  // treated as a tap on pointerup.
-  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
-
-  const handleItemPointerDown = (e: React.PointerEvent) => {
-    pointerStartRef.current =
-      e.pointerType === "mouse" ? null : { x: e.clientX, y: e.clientY };
-  };
-
-  // True only for a touch/pen release that stayed within the tap threshold.
-  const isPointerTap = (e: React.PointerEvent) => {
-    const start = pointerStartRef.current;
-    pointerStartRef.current = null;
-    if (!start) return false;
-    return (
-      Math.abs(e.clientX - start.x) <= 10 && Math.abs(e.clientY - start.y) <= 10
-    );
-  };
 
   // Sync open state with defaultOpen prop for controlled auto-open behavior
   useEffect(() => {
@@ -328,17 +309,6 @@ export function ResourceDefinitionCategoryPicker<T>({
   // Reset search when navigating
   const resetSearch = () => setSearchQuery("");
 
-  // On mobile, blur the focused search input when the list is scrolled. While it
-  // stays focused, vaul re-sizes the drawer to the keyboard on every
-  // visualViewport event fired during scroll, which shows up as a blink.
-  const dismissKeyboardOnScroll = () => {
-    if (!isMobile) return;
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active.tagName === "INPUT") {
-      active.blur();
-    }
-  };
-
   const handleCategorySelect = (
     categorySlug: string,
     categoryTitle: string,
@@ -391,11 +361,6 @@ export function ResourceDefinitionCategoryPicker<T>({
       }
     } else {
       onValueChange(definition as T);
-      // Blur the focused search input first so the mobile keyboard dismisses
-      // cleanly instead of the page scrolling to the input as the drawer closes.
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
       setOpen(false);
       resetSearch();
     }
@@ -503,7 +468,7 @@ export function ResourceDefinitionCategoryPicker<T>({
         value={searchQuery}
         onValueChange={setSearchQuery}
         className="h-9 border-0 focus:ring-0 text-base sm:text-sm"
-        autoFocus
+        autoFocus={!isIOSDevice}
       />
     </div>
   );
@@ -616,20 +581,9 @@ export function ResourceDefinitionCategoryPicker<T>({
             <CommandItem
               key={category.id}
               value={category.title}
-              onSelect={() => {
-                if (pointerSelectedRef.current) {
-                  pointerSelectedRef.current = false;
-                  return;
-                }
-                handleCategorySelect(category.slug, category.title);
-              }}
-              onPointerDown={handleItemPointerDown}
-              onPointerUp={(e) => {
-                if (isPointerTap(e)) {
-                  pointerSelectedRef.current = true;
-                  handleCategorySelect(category.slug, category.title);
-                }
-              }}
+              onSelect={() =>
+                handleCategorySelect(category.slug, category.title)
+              }
               className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150 border-b border-gray-200"
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -656,20 +610,7 @@ export function ResourceDefinitionCategoryPicker<T>({
           <CommandItem
             key={category.id}
             value={category.title}
-            onSelect={() => {
-              if (pointerSelectedRef.current) {
-                pointerSelectedRef.current = false;
-                return;
-              }
-              handleCategorySelect(category.slug, category.title);
-            }}
-            onPointerDown={handleItemPointerDown}
-            onPointerUp={(e) => {
-              if (isPointerTap(e)) {
-                pointerSelectedRef.current = true;
-                handleCategorySelect(category.slug, category.title);
-              }
-            }}
+            onSelect={() => handleCategorySelect(category.slug, category.title)}
             className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150 border-b border-gray-200"
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -699,22 +640,7 @@ export function ResourceDefinitionCategoryPicker<T>({
       <CommandItem
         key={definition.id}
         value={`${definition.title}-${definition.id}`}
-        onSelect={() => {
-          if (pointerSelectedRef.current) {
-            pointerSelectedRef.current = false;
-            return;
-          }
-          handleDefinitionSelect(definition);
-        }}
-        onPointerDown={handleItemPointerDown}
-        onPointerUp={(e) => {
-          // Ignore taps on the favorite toggle button
-          if (e.target instanceof Element && e.target.closest("button")) return;
-          if (isPointerTap(e)) {
-            pointerSelectedRef.current = true;
-            handleDefinitionSelect(definition);
-          }
-        }}
+        onSelect={() => handleDefinitionSelect(definition)}
         className={cn(
           "flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150 border-b border-gray-200 last:border-b-0",
           searchQuery && definition.category && "py-1",
@@ -854,7 +780,6 @@ export function ResourceDefinitionCategoryPicker<T>({
       {renderBreadcrumbs()}
       <CommandList
         data-vaul-no-drag
-        onScroll={dismissKeyboardOnScroll}
         className={cn(isMobile ? "max-h-full h-[40vh]" : "max-h-[40vh]")}
       >
         {renderEmptyState()}
@@ -967,7 +892,7 @@ export function ResourceDefinitionCategoryPicker<T>({
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  <TabsContent value="search" className="h-full mt-0" autoFocus>
+                  <TabsContent value="search" className="h-full mt-0">
                     {renderMainContent()}
                   </TabsContent>
                   <TabsContent value="recent" className="h-full mt-0">

@@ -161,6 +161,24 @@ export function ResourceDefinitionCategoryPicker<T>({
   const [breadcrumbsExpanded, setBreadcrumbsExpanded] = useState(false);
   // Set on touch/pen pointerup to avoid double selection from the following onSelect.
   const pointerSelectedRef = useRef(false);
+  // Records where a touch/pen press started so a moved pointer (scroll) is not
+  // treated as a tap on pointerup.
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleItemPointerDown = (e: React.PointerEvent) => {
+    pointerStartRef.current =
+      e.pointerType === "mouse" ? null : { x: e.clientX, y: e.clientY };
+  };
+
+  // True only for a touch/pen release that stayed within the tap threshold.
+  const isPointerTap = (e: React.PointerEvent) => {
+    const start = pointerStartRef.current;
+    pointerStartRef.current = null;
+    if (!start) return false;
+    return (
+      Math.abs(e.clientX - start.x) <= 10 && Math.abs(e.clientY - start.y) <= 10
+    );
+  };
 
   // Sync open state with defaultOpen prop for controlled auto-open behavior
   useEffect(() => {
@@ -310,6 +328,17 @@ export function ResourceDefinitionCategoryPicker<T>({
   // Reset search when navigating
   const resetSearch = () => setSearchQuery("");
 
+  // On mobile, blur the focused search input when the list is scrolled. While it
+  // stays focused, vaul re-sizes the drawer to the keyboard on every
+  // visualViewport event fired during scroll, which shows up as a blink.
+  const dismissKeyboardOnScroll = () => {
+    if (!isMobile) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.tagName === "INPUT") {
+      active.blur();
+    }
+  };
+
   const handleCategorySelect = (
     categorySlug: string,
     categoryTitle: string,
@@ -362,6 +391,11 @@ export function ResourceDefinitionCategoryPicker<T>({
       }
     } else {
       onValueChange(definition as T);
+      // Blur the focused search input first so the mobile keyboard dismisses
+      // cleanly instead of the page scrolling to the input as the drawer closes.
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
       setOpen(false);
       resetSearch();
     }
@@ -589,8 +623,9 @@ export function ResourceDefinitionCategoryPicker<T>({
                 }
                 handleCategorySelect(category.slug, category.title);
               }}
+              onPointerDown={handleItemPointerDown}
               onPointerUp={(e) => {
-                if (e.pointerType !== "mouse") {
+                if (isPointerTap(e)) {
                   pointerSelectedRef.current = true;
                   handleCategorySelect(category.slug, category.title);
                 }
@@ -628,8 +663,9 @@ export function ResourceDefinitionCategoryPicker<T>({
               }
               handleCategorySelect(category.slug, category.title);
             }}
+            onPointerDown={handleItemPointerDown}
             onPointerUp={(e) => {
-              if (e.pointerType !== "mouse") {
+              if (isPointerTap(e)) {
                 pointerSelectedRef.current = true;
                 handleCategorySelect(category.slug, category.title);
               }
@@ -670,11 +706,11 @@ export function ResourceDefinitionCategoryPicker<T>({
           }
           handleDefinitionSelect(definition);
         }}
+        onPointerDown={handleItemPointerDown}
         onPointerUp={(e) => {
-          if (e.pointerType !== "mouse") {
-            // Ignore taps on the favorite toggle button
-            if (e.target instanceof Element && e.target.closest("button"))
-              return;
+          // Ignore taps on the favorite toggle button
+          if (e.target instanceof Element && e.target.closest("button")) return;
+          if (isPointerTap(e)) {
             pointerSelectedRef.current = true;
             handleDefinitionSelect(definition);
           }
@@ -818,6 +854,7 @@ export function ResourceDefinitionCategoryPicker<T>({
       {renderBreadcrumbs()}
       <CommandList
         data-vaul-no-drag
+        onScroll={dismissKeyboardOnScroll}
         className={cn(isMobile ? "max-h-full h-[40vh]" : "max-h-[40vh]")}
       >
         {renderEmptyState()}

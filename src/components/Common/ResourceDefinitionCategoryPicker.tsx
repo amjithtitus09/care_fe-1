@@ -689,7 +689,6 @@ export function ResourceDefinitionCategoryPicker<T>({
 
   const renderRecentItems = () => (
     <div
-      data-vaul-no-drag
       className={cn(
         "overflow-auto min-h-0",
         isMobile ? "max-h-full" : "max-h-[40vh]",
@@ -728,7 +727,6 @@ export function ResourceDefinitionCategoryPicker<T>({
 
   const renderFavoriteItems = () => (
     <div
-      data-vaul-no-drag
       className={cn(
         "overflow-auto min-h-0",
         isMobile ? "max-h-full" : "max-h-[40vh]",
@@ -779,7 +777,6 @@ export function ResourceDefinitionCategoryPicker<T>({
       {renderSearchInput()}
       {renderBreadcrumbs()}
       <CommandList
-        data-vaul-no-drag
         className={cn(isMobile ? "max-h-full h-[40vh]" : "max-h-[40vh]")}
       >
         {renderEmptyState()}

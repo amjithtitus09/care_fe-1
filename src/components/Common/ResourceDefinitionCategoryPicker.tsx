@@ -12,7 +12,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -159,6 +159,8 @@ export function ResourceDefinitionCategoryPicker<T>({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [breadcrumbsExpanded, setBreadcrumbsExpanded] = useState(false);
+  // Set on touch/pen pointerup to avoid double selection from the following onSelect.
+  const pointerSelectedRef = useRef(false);
 
   // Sync open state with defaultOpen prop for controlled auto-open behavior
   useEffect(() => {
@@ -580,12 +582,16 @@ export function ResourceDefinitionCategoryPicker<T>({
             <CommandItem
               key={category.id}
               value={category.title}
-              onSelect={() =>
-                handleCategorySelect(category.slug, category.title)
-              }
+              onSelect={() => {
+                if (pointerSelectedRef.current) {
+                  pointerSelectedRef.current = false;
+                  return;
+                }
+                handleCategorySelect(category.slug, category.title);
+              }}
               onPointerUp={(e) => {
                 if (e.pointerType !== "mouse") {
-                  e.preventDefault();
+                  pointerSelectedRef.current = true;
                   handleCategorySelect(category.slug, category.title);
                 }
               }}
@@ -615,10 +621,16 @@ export function ResourceDefinitionCategoryPicker<T>({
           <CommandItem
             key={category.id}
             value={category.title}
-            onSelect={() => handleCategorySelect(category.slug, category.title)}
+            onSelect={() => {
+              if (pointerSelectedRef.current) {
+                pointerSelectedRef.current = false;
+                return;
+              }
+              handleCategorySelect(category.slug, category.title);
+            }}
             onPointerUp={(e) => {
               if (e.pointerType !== "mouse") {
-                e.preventDefault();
+                pointerSelectedRef.current = true;
                 handleCategorySelect(category.slug, category.title);
               }
             }}
@@ -651,12 +663,19 @@ export function ResourceDefinitionCategoryPicker<T>({
       <CommandItem
         key={definition.id}
         value={`${definition.title}-${definition.id}`}
-        onSelect={() => handleDefinitionSelect(definition)}
+        onSelect={() => {
+          if (pointerSelectedRef.current) {
+            pointerSelectedRef.current = false;
+            return;
+          }
+          handleDefinitionSelect(definition);
+        }}
         onPointerUp={(e) => {
           if (e.pointerType !== "mouse") {
             // Ignore taps on the favorite toggle button
-            if ((e.target as HTMLElement).closest("button")) return;
-            e.preventDefault();
+            if (e.target instanceof Element && e.target.closest("button"))
+              return;
+            pointerSelectedRef.current = true;
             handleDefinitionSelect(definition);
           }
         }}

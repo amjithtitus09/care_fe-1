@@ -50,7 +50,6 @@ import resourceCategoryApi from "@/types/base/resourceCategory/resourceCategoryA
 import { ProductKnowledgeType } from "@/types/inventory/productKnowledge/productKnowledge";
 import mutate from "@/Utils/request/mutate";
 import query from "@/Utils/request/query";
-import { isIOSDevice } from "@/Utils/utils";
 
 interface CategoryBreadcrumb {
   slug: string;
@@ -794,10 +793,7 @@ export function ResourceDefinitionCategoryPicker<T>({
       {isMobile ? (
         <Drawer
           open={open}
-          // On iOS, vaul repositions content when an input is focused, which
-          // makes the soft keyboard close/reopen and shifts the layout on tap,
-          // breaking category selection. Disable repositioning on iOS.
-          repositionInputs={!isIOSDevice}
+          repositionInputs={false}
           onOpenChange={(newOpen) => {
             setOpen(newOpen);
             resetSearch();

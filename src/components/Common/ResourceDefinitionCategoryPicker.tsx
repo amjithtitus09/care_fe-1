@@ -468,7 +468,7 @@ export function ResourceDefinitionCategoryPicker<T>({
         value={searchQuery}
         onValueChange={setSearchQuery}
         className="h-9 border-0 focus:ring-0 text-base sm:text-sm"
-        autoFocus={!isIOSDevice}
+        autoFocus
       />
     </div>
   );
@@ -794,6 +794,10 @@ export function ResourceDefinitionCategoryPicker<T>({
       {isMobile ? (
         <Drawer
           open={open}
+          // On iOS, vaul repositions content when an input is focused, which
+          // makes the soft keyboard close/reopen and shifts the layout on tap,
+          // breaking category selection. Disable repositioning on iOS.
+          repositionInputs={!isIOSDevice}
           onOpenChange={(newOpen) => {
             setOpen(newOpen);
             resetSearch();
@@ -889,11 +893,7 @@ export function ResourceDefinitionCategoryPicker<T>({
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  <TabsContent
-                    value="search"
-                    className="h-full mt-0"
-                    autoFocus={!isIOSDevice}
-                  >
+                  <TabsContent value="search" className="h-full mt-0" autoFocus>
                     {renderMainContent()}
                   </TabsContent>
                   <TabsContent value="recent" className="h-full mt-0">

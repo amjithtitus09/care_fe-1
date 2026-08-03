@@ -9,7 +9,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -130,33 +130,84 @@ export function DiagnosticReportForm({
   const [selectedReportCode, setSelectedReportCode] = useState<Code | null>(
     null,
   );
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [openUploadDialog, setOpenUploadDialog] = useState(false);
   const [conclusion, setConclusion] = useState<string>("");
   const queryClient = useQueryClient();
 
-  // Get the latest report if any exists
+  // Get the latest report if any exists (for backward compatibility)
   const latestReport =
     diagnosticReports.length > 0 ? diagnosticReports[0] : null;
-  const hasReport = !!latestReport;
+  const hasReport = diagnosticReports.length > 0;
+
+  // Initialize selectedReportId to the latest report once
+  useEffect(() => {
+    if (latestReport && !selectedReportId) {
+      setSelectedReportId(latestReport.id);
+    }
+    // Only run when latestReport.id changes, not on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestReport?.id]);
+
+  // Calculate which codes are already used across all diagnostic reports
+  const usedCodes = new Set(
+    diagnosticReports
+      .filter((report) => report.code)
+      .map((report) => report.code!.code),
+  );
+
+  // Filter available codes to only show unused ones
+  const availableCodes =
+    activityDefinition?.diagnostic_report_codes?.filter(
+      (code) => !usedCodes.has(code.code),
+    ) || [];
+
+  // Check if all codes have been used
+  const allCodesUsed =
+    activityDefinition?.diagnostic_report_codes &&
+    activityDefinition.diagnostic_report_codes.length > 0 &&
+    availableCodes.length === 0;
 
   // Check if all required specimens are collected
   const hasCollectedSpecimens =
     activityDefinition?.specimen_requirements?.length === 0 ||
     specimens.some((specimen) => specimen.status === SpecimenStatus.available);
 
-  // Fetch the full diagnostic report to get observations
-  const { data: fullReport, isLoading: isLoadingReport } = useQuery({
-    queryKey: ["diagnosticReport", latestReport?.id],
-    queryFn: query(diagnosticReportApi.retrieveDiagnosticReport, {
-      pathParams: {
-        patient_external_id: patientId,
-        external_id: latestReport?.id || "",
-      },
-    }),
-    enabled: !!latestReport?.id,
-  });
+  // Memoize report IDs to prevent query re-creation on every render
+  const reportIds = useMemo(
+    () => diagnosticReports.map((report) => report.id),
+    [diagnosticReports],
+  );
 
-  // Query to fetch files for the diagnostic report
+  // Fetch full details for all diagnostic reports to get observations
+  const fullReportsQueries = useMemo(
+    () =>
+      reportIds.map((reportId) => ({
+        queryKey: ["diagnosticReport", reportId] as const,
+        queryFn: query(diagnosticReportApi.retrieveDiagnosticReport, {
+          pathParams: {
+            patient_external_id: patientId,
+            external_id: reportId,
+          },
+        }),
+        enabled: !!reportId,
+      })),
+    [reportIds, patientId],
+  );
+
+  // Use the queries
+  const fullReportsQueryResults = fullReportsQueries.map((queryOptions) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useQuery(queryOptions),
+  );
+
+  // Get the selected full report or the latest one
+  const fullReport =
+    fullReportsQueryResults.find((q) => q.data?.id === selectedReportId)
+      ?.data || fullReportsQueryResults[0]?.data;
+  const isLoadingReport = fullReportsQueryResults.some((q) => q.isLoading);
+
+  // Query to fetch files for the latest diagnostic report
   const { data: files = { results: [], count: 0 } } = useQuery<
     PaginatedResponse<FileReadMinimal>
   >({
@@ -189,6 +240,8 @@ export function DiagnosticReportForm({
         queryClient.invalidateQueries({
           queryKey: ["diagnosticReport"],
         });
+        // Reset the selected code after successful creation
+        setSelectedReportCode(null);
       },
       onError: (err: any) => {
         toast.error(
@@ -197,23 +250,12 @@ export function DiagnosticReportForm({
       },
     });
 
-  // Effect to handle diagnostic reports changes
+  // Effect to handle diagnostic reports changes - keep form expanded when reports exist
   useEffect(() => {
-    const latestReport = diagnosticReports[0];
-    if (latestReport) {
-      // If we have a new report, update the UI accordingly
-      setSelectedReportCode(latestReport.code || null);
+    if (diagnosticReports.length > 0) {
       setIsExpanded(true);
     }
   }, [diagnosticReports]);
-
-  // Effect to handle fullReport changes
-  useEffect(() => {
-    if (fullReport) {
-      // When we get the full report details, ensure UI is in correct state
-      setSelectedReportCode(fullReport.code || null);
-    }
-  }, [fullReport]);
 
   // Upserting observations for a diagnostic report
   const { mutate: upsertObservations, isPending: isUpsertingObservations } =
@@ -221,7 +263,7 @@ export function DiagnosticReportForm({
       mutationFn: mutate(observationApi.upsertObservations, {
         pathParams: {
           patient_external_id: patientId,
-          external_id: latestReport?.id || "",
+          external_id: selectedReportId || "",
         },
       }),
       onSuccess: () => {
@@ -230,7 +272,7 @@ export function DiagnosticReportForm({
           queryKey: ["serviceRequest", serviceRequestId],
         });
         queryClient.invalidateQueries({
-          queryKey: ["diagnosticReport", latestReport?.id],
+          queryKey: ["diagnosticReport", selectedReportId],
         });
       },
       onError: (err: any) => {
@@ -245,13 +287,13 @@ export function DiagnosticReportForm({
       mutationFn: mutate(diagnosticReportApi.updateDiagnosticReport, {
         pathParams: {
           patient_external_id: patientId,
-          external_id: latestReport?.id || "",
+          external_id: selectedReportId || "",
         },
       }),
       onSuccess: () => {
         toast.success(t("conclusion_updated_successfully"));
         queryClient.invalidateQueries({
-          queryKey: ["diagnosticReport", latestReport?.id],
+          queryKey: ["diagnosticReport", selectedReportId],
         });
         setIsExpanded(false);
       },
@@ -268,7 +310,7 @@ export function DiagnosticReportForm({
     allowNameFallback: false,
     onUpload: () => {
       queryClient.invalidateQueries({
-        queryKey: ["diagnosticReport", latestReport?.id],
+        queryKey: ["diagnosticReport", selectedReportId],
       });
     },
     compress: false,
@@ -466,26 +508,23 @@ export function DiagnosticReportForm({
   }
 
   function handleCreateReport() {
-    // Only create a new report if no reports exist
-    if (!hasReport) {
-      if (!hasCollectedSpecimens) {
-        toast.error(t("specimen_collection_required"));
-        return;
-      }
-
-      const category: Code = {
-        code: "LAB",
-        display: "Laboratory",
-        system: "http://terminology.hl7.org/CodeSystem/v2-0074",
-      };
-
-      createDiagnosticReport({
-        status: DiagnosticReportStatus.preliminary,
-        category,
-        service_request: serviceRequestId,
-        code: selectedReportCode || undefined,
-      });
+    if (!hasCollectedSpecimens) {
+      toast.error(t("specimen_collection_required"));
+      return;
     }
+
+    const category: Code = {
+      code: "LAB",
+      display: "Laboratory",
+      system: "http://terminology.hl7.org/CodeSystem/v2-0074",
+    };
+
+    createDiagnosticReport({
+      status: DiagnosticReportStatus.preliminary,
+      category,
+      service_request: serviceRequestId,
+      code: selectedReportCode || undefined,
+    });
   }
 
   function handleSubmit() {
@@ -895,7 +934,38 @@ export function DiagnosticReportForm({
               __name="ServiceRequestAction"
               serviceRequestId={serviceRequestId}
             />
-            {hasReport && fullReport ? (
+            {/* Report selector when multiple reports exist */}
+            {hasReport && diagnosticReports.length > 1 && (
+              <div className="mb-4">
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  {t("select_report_to_view")}
+                </Label>
+                <Select
+                  value={selectedReportId || ""}
+                  onValueChange={(value) => setSelectedReportId(value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={t("select_report")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {diagnosticReports.map((report) => (
+                      <SelectItem key={report.id} value={report.id}>
+                        <div className="flex flex-col">
+                          <span className="truncate">
+                            {report.code?.display || t("diagnostic_report")} -{" "}
+                            {report.code?.code || ""}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(report.created_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {hasReport && fullReport && (
               <div className="space-y-6">
                 {fullReport.status !== DiagnosticReportStatus.final && (
                   <PLUGIN_Component
@@ -1229,65 +1299,79 @@ export function DiagnosticReportForm({
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4 bg-gray-50 rounded-lg p-4">
+            )}
+
+            {/* Creation form for additional reports */}
+            {!allCodesUsed && availableCodes.length > 0 && (
+              <div
+                className={cn(
+                  "space-y-4 bg-gray-50 rounded-lg p-4",
+                  hasReport && "mt-6",
+                )}
+              >
                 <div className="text-gray-500 flex justify-center items-center">
                   <p className="mt-2 text-sm text-gray-500 text-center">
                     {!hasCollectedSpecimens
                       ? t("collect_specimen_before_report")
-                      : t("no_test_results_recorded")}
+                      : hasReport
+                        ? t("create_additional_diagnostic_report")
+                        : t("no_test_results_recorded")}
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 justify-center">
-                  {activityDefinition?.diagnostic_report_codes &&
-                    activityDefinition.diagnostic_report_codes.length > 0 && (
-                      <div className="flex-1 min-w-0">
-                        <Select
-                          value={selectedReportCode?.code}
-                          onValueChange={(value) => {
-                            const code =
-                              activityDefinition.diagnostic_report_codes?.find(
-                                (c) => c.code === value,
-                              );
-                            setSelectedReportCode(code || null);
-                          }}
-                          disabled={!hasCollectedSpecimens || disableEdit}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue
-                              placeholder={t("select_diagnostic_report_type")}
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {activityDefinition.diagnostic_report_codes.map(
-                              (code) => (
-                                <SelectItem key={code.code} value={code.code}>
-                                  <div className="flex flex-col">
-                                    <span className="truncate">
-                                      {code.display} ({code.code})
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ),
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <Select
+                      value={selectedReportCode?.code}
+                      onValueChange={(value) => {
+                        const code = availableCodes.find(
+                          (c) => c.code === value,
+                        );
+                        setSelectedReportCode(code || null);
+                      }}
+                      disabled={!hasCollectedSpecimens || disableEdit}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue
+                          placeholder={t("select_diagnostic_report_type")}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableCodes.map((code) => (
+                          <SelectItem key={code.code} value={code.code}>
+                            <div className="flex flex-col">
+                              <span className="truncate">
+                                {code.display} ({code.code})
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button
                     onClick={handleCreateReport}
                     disabled={
                       disableEdit ||
                       isCreatingReport ||
                       !hasCollectedSpecimens ||
-                      (!!activityDefinition?.diagnostic_report_codes?.length &&
-                        !selectedReportCode)
+                      !selectedReportCode
                     }
                     className="w-full sm:w-auto sm:shrink-0"
                   >
                     <PlusCircle className="size-4 mr-2" />
                     {t("create_report")}
                   </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Show message when all codes are used */}
+            {allCodesUsed && (
+              <div className="space-y-4 bg-gray-50 rounded-lg p-4 mt-6">
+                <div className="text-gray-500 flex justify-center items-center">
+                  <p className="mt-2 text-sm text-gray-500 text-center">
+                    {t("all_diagnostic_reports_created")}
+                  </p>
                 </div>
               </div>
             )}

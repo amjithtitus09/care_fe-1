@@ -139,6 +139,25 @@ export function DiagnosticReportForm({
     diagnosticReports.length > 0 ? diagnosticReports[0] : null;
   const hasReport = !!latestReport;
 
+  // Calculate which codes are already used across all diagnostic reports
+  const usedCodes = new Set(
+    diagnosticReports
+      .filter((report) => report.code)
+      .map((report) => report.code!.code),
+  );
+
+  // Filter available codes to only show unused ones
+  const availableCodes =
+    activityDefinition?.diagnostic_report_codes?.filter(
+      (code) => !usedCodes.has(code.code),
+    ) || [];
+
+  // Check if all codes have been used
+  const allCodesUsed =
+    activityDefinition?.diagnostic_report_codes &&
+    activityDefinition.diagnostic_report_codes.length > 0 &&
+    availableCodes.length === 0;
+
   // Check if all required specimens are collected
   const hasCollectedSpecimens =
     activityDefinition?.specimen_requirements?.length === 0 ||
@@ -182,6 +201,8 @@ export function DiagnosticReportForm({
       }),
       onSuccess: () => {
         toast.success(t("diagnostic_report_created_successfully"));
+        // Reset selected code for next report
+        setSelectedReportCode(null);
         queryClient.invalidateQueries({
           queryKey: ["serviceRequest"],
         });
@@ -466,26 +487,24 @@ export function DiagnosticReportForm({
   }
 
   function handleCreateReport() {
-    // Only create a new report if no reports exist
-    if (!hasReport) {
-      if (!hasCollectedSpecimens) {
-        toast.error(t("specimen_collection_required"));
-        return;
-      }
-
-      const category: Code = {
-        code: "LAB",
-        display: "Laboratory",
-        system: "http://terminology.hl7.org/CodeSystem/v2-0074",
-      };
-
-      createDiagnosticReport({
-        status: DiagnosticReportStatus.preliminary,
-        category,
-        service_request: serviceRequestId,
-        code: selectedReportCode || undefined,
-      });
+    // Check if specimens are collected before creating report
+    if (!hasCollectedSpecimens) {
+      toast.error(t("specimen_collection_required"));
+      return;
     }
+
+    const category: Code = {
+      code: "LAB",
+      display: "Laboratory",
+      system: "http://terminology.hl7.org/CodeSystem/v2-0074",
+    };
+
+    createDiagnosticReport({
+      status: DiagnosticReportStatus.preliminary,
+      category,
+      service_request: serviceRequestId,
+      code: selectedReportCode || undefined,
+    });
   }
 
   function handleSubmit() {
@@ -1235,20 +1254,21 @@ export function DiagnosticReportForm({
                   <p className="mt-2 text-sm text-gray-500 text-center">
                     {!hasCollectedSpecimens
                       ? t("collect_specimen_before_report")
-                      : t("no_test_results_recorded")}
+                      : allCodesUsed
+                        ? t("all_diagnostic_reports_created")
+                        : t("no_test_results_recorded")}
                   </p>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 justify-center">
-                  {activityDefinition?.diagnostic_report_codes &&
-                    activityDefinition.diagnostic_report_codes.length > 0 && (
+                {!allCodesUsed && (
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 justify-center">
+                    {availableCodes.length > 0 && (
                       <div className="flex-1 min-w-0">
                         <Select
                           value={selectedReportCode?.code}
                           onValueChange={(value) => {
-                            const code =
-                              activityDefinition.diagnostic_report_codes?.find(
-                                (c) => c.code === value,
-                              );
+                            const code = availableCodes.find(
+                              (c) => c.code === value,
+                            );
                             setSelectedReportCode(code || null);
                           }}
                           disabled={!hasCollectedSpecimens || disableEdit}
@@ -1259,36 +1279,34 @@ export function DiagnosticReportForm({
                             />
                           </SelectTrigger>
                           <SelectContent>
-                            {activityDefinition.diagnostic_report_codes.map(
-                              (code) => (
-                                <SelectItem key={code.code} value={code.code}>
-                                  <div className="flex flex-col">
-                                    <span className="truncate">
-                                      {code.display} ({code.code})
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ),
-                            )}
+                            {availableCodes.map((code) => (
+                              <SelectItem key={code.code} value={code.code}>
+                                <div className="flex flex-col">
+                                  <span className="truncate">
+                                    {code.display} ({code.code})
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
                     )}
-                  <Button
-                    onClick={handleCreateReport}
-                    disabled={
-                      disableEdit ||
-                      isCreatingReport ||
-                      !hasCollectedSpecimens ||
-                      (!!activityDefinition?.diagnostic_report_codes?.length &&
-                        !selectedReportCode)
-                    }
-                    className="w-full sm:w-auto sm:shrink-0"
-                  >
-                    <PlusCircle className="size-4 mr-2" />
-                    {t("create_report")}
-                  </Button>
-                </div>
+                    <Button
+                      onClick={handleCreateReport}
+                      disabled={
+                        disableEdit ||
+                        isCreatingReport ||
+                        !hasCollectedSpecimens ||
+                        (availableCodes.length > 0 && !selectedReportCode)
+                      }
+                      className="w-full sm:w-auto sm:shrink-0"
+                    >
+                      <PlusCircle className="size-4 mr-2" />
+                      {t("create_report")}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

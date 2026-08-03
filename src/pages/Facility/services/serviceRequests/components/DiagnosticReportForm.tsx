@@ -201,8 +201,6 @@ export function DiagnosticReportForm({
       }),
       onSuccess: () => {
         toast.success(t("diagnostic_report_created_successfully"));
-        // Reset selected code for next report
-        setSelectedReportCode(null);
         queryClient.invalidateQueries({
           queryKey: ["serviceRequest"],
         });
@@ -210,6 +208,8 @@ export function DiagnosticReportForm({
         queryClient.invalidateQueries({
           queryKey: ["diagnosticReport"],
         });
+        // Reset the selected code after successful creation
+        setSelectedReportCode(null);
       },
       onError: (err: any) => {
         toast.error(
@@ -487,7 +487,6 @@ export function DiagnosticReportForm({
   }
 
   function handleCreateReport() {
-    // Check if specimens are collected before creating report
     if (!hasCollectedSpecimens) {
       toast.error(t("specimen_collection_required"));
       return;

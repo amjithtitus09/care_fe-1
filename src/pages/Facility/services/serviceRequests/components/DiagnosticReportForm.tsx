@@ -310,7 +310,7 @@ export function DiagnosticReportForm({
     allowNameFallback: false,
     onUpload: () => {
       queryClient.invalidateQueries({
-        queryKey: ["diagnosticReport", latestReport?.id],
+        queryKey: ["diagnosticReport", selectedReportId],
       });
     },
     compress: false,

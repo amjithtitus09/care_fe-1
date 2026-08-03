@@ -9,7 +9,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -140,12 +140,14 @@ export function DiagnosticReportForm({
     diagnosticReports.length > 0 ? diagnosticReports[0] : null;
   const hasReport = diagnosticReports.length > 0;
 
-  // Initialize selectedReportId to the latest report
+  // Initialize selectedReportId to the latest report once
   useEffect(() => {
     if (latestReport && !selectedReportId) {
       setSelectedReportId(latestReport.id);
     }
-  }, [latestReport, selectedReportId]);
+    // Only run when latestReport.id changes, not on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestReport?.id]);
 
   // Calculate which codes are already used across all diagnostic reports
   const usedCodes = new Set(
@@ -171,25 +173,39 @@ export function DiagnosticReportForm({
     activityDefinition?.specimen_requirements?.length === 0 ||
     specimens.some((specimen) => specimen.status === SpecimenStatus.available);
 
+  // Memoize report IDs to prevent query re-creation on every render
+  const reportIds = useMemo(
+    () => diagnosticReports.map((report) => report.id),
+    [diagnosticReports],
+  );
+
   // Fetch full details for all diagnostic reports to get observations
-  const fullReportsQueries = diagnosticReports.map((report) =>
-    useQuery({
-      queryKey: ["diagnosticReport", report.id],
-      queryFn: query(diagnosticReportApi.retrieveDiagnosticReport, {
-        pathParams: {
-          patient_external_id: patientId,
-          external_id: report.id,
-        },
-      }),
-      enabled: !!report.id,
-    }),
+  const fullReportsQueries = useMemo(
+    () =>
+      reportIds.map((reportId) => ({
+        queryKey: ["diagnosticReport", reportId] as const,
+        queryFn: query(diagnosticReportApi.retrieveDiagnosticReport, {
+          pathParams: {
+            patient_external_id: patientId,
+            external_id: reportId,
+          },
+        }),
+        enabled: !!reportId,
+      })),
+    [reportIds, patientId],
+  );
+
+  // Use the queries
+  const fullReportsQueryResults = fullReportsQueries.map((queryOptions) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useQuery(queryOptions),
   );
 
   // Get the selected full report or the latest one
   const fullReport =
-    fullReportsQueries.find((q) => q.data?.id === selectedReportId)?.data ||
-    fullReportsQueries[0]?.data;
-  const isLoadingReport = fullReportsQueries.some((q) => q.isLoading);
+    fullReportsQueryResults.find((q) => q.data?.id === selectedReportId)
+      ?.data || fullReportsQueryResults[0]?.data;
+  const isLoadingReport = fullReportsQueryResults.some((q) => q.isLoading);
 
   // Query to fetch files for the latest diagnostic report
   const { data: files = { results: [], count: 0 } } = useQuery<
@@ -247,7 +263,7 @@ export function DiagnosticReportForm({
       mutationFn: mutate(observationApi.upsertObservations, {
         pathParams: {
           patient_external_id: patientId,
-          external_id: latestReport?.id || "",
+          external_id: selectedReportId || "",
         },
       }),
       onSuccess: () => {
@@ -256,7 +272,7 @@ export function DiagnosticReportForm({
           queryKey: ["serviceRequest", serviceRequestId],
         });
         queryClient.invalidateQueries({
-          queryKey: ["diagnosticReport", latestReport?.id],
+          queryKey: ["diagnosticReport", selectedReportId],
         });
       },
       onError: (err: any) => {
@@ -271,13 +287,13 @@ export function DiagnosticReportForm({
       mutationFn: mutate(diagnosticReportApi.updateDiagnosticReport, {
         pathParams: {
           patient_external_id: patientId,
-          external_id: latestReport?.id || "",
+          external_id: selectedReportId || "",
         },
       }),
       onSuccess: () => {
         toast.success(t("conclusion_updated_successfully"));
         queryClient.invalidateQueries({
-          queryKey: ["diagnosticReport", latestReport?.id],
+          queryKey: ["diagnosticReport", selectedReportId],
         });
         setIsExpanded(false);
       },

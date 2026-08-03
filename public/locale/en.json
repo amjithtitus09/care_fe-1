@@ -6685,5 +6685,8 @@
   "zoom_in": "Zoom In",
   "zoom_out": "Zoom Out",
   "℞": "℞",
-  "all_diagnostic_reports_created": "All diagnostic reports have been created for this service request."
+  "all_diagnostic_reports_created": "All diagnostic reports have been created for this service request.",
+  "create_additional_diagnostic_report": "Create an additional diagnostic report",
+  "select_report_to_view": "Select report to view",
+  "select_report": "Select a report"
 }
